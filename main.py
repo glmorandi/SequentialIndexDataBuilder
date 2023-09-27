@@ -11,6 +11,9 @@ print(df.columns)
 # Seleciona apenas a categorias a serem utilizadas
 df = df.filter(["App Name", "App Id", "Category", "Installs"])
 
+# Ordenar os valores pela chave
+df = df.sort_values(by=['App Id'], ascending=True)
+
 df.to_csv("base.csv", index=False, header=False)
 
 # Conseguir o maior valor para cada coluna
