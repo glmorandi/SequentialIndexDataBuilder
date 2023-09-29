@@ -438,6 +438,9 @@ int main()
     struct MemoryIndexEntry *thirdIndex = NULL;
     int indexSize = 0;
 
+    // Definição para o índice em AVL
+    struct AVLNode *avlIndex = NULL;
+
     // Para as pesquisas
     const char *appId = "com.ironwaterstudio.masks";
     const char *appName = "Pupsy";
@@ -445,39 +448,31 @@ int main()
     const int numThreads = 4; // Número de threads a serem usadas
 
     if (processCSVFileWithThreads(filename, binaryFilename, numThreads) == 0)
-    {
         printf("Processamento do arquivo CSV concluído com sucesso.\n");
-        // readAndPrintBinaryFile(binaryFilename);
-    }
 
     FILE *bin = fopen(binaryFilename, "rb");
 
     // Cria índice em arquvio do appId
     if (createFileIndex(bin, firstIndex, APP_ID) == 0)
-    {
         printf("Criação do primeiro índice concluído com sucesso.\n");
-    }
-    rewind(bin);
+
     // Cria índice em arquivo do appName
     if (createFileIndex(bin, secondIndex, APP_NAME) == 0)
-    {
         printf("Criação do segundo índice concluído com sucesso.\n");
-    }
-    rewind(bin);
+
     // Cria índice em memória do category
     if (createMemoryIndex(bin, &thirdIndex, &indexSize, CATEGORY) == 0)
-    {
         printf("Criação do terceiro índice concluído com sucesso.\n");
-    }
-    rewind(bin);
+
     // Cria índice em memória utilizando uma AVL do installs
-    struct AVLNode *avlIndex = NULL;
     createMemoryAVLIndex(bin, &avlIndex, INSTALLS);
 
     if (avlIndex != NULL)
-    {
         printf("Criação do quarto índice concluído com sucesso.\n");
-    }
-    rewind(bin);
+
+    free(thirdIndex);
+    free(avlIndex);
+    fclose(bin);
+
     return 0;
 }

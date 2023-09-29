@@ -23,3 +23,5 @@ print(max_lengths)
 
 # Versão menor para testar
 df[:1000000].to_csv("mini.csv", index=False, header=False)
+
+print(df)
