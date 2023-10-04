@@ -7,15 +7,15 @@
 #define MAX_LINE_LENGTH 2048
 #define MAX_APPNAME_LENGTH 50
 #define MAX_APPID_LENGTH 150
-#define MAX_CATEGORY_LENGTH 23
-#define MAX_INSTALLS_LENGTH 15
+#define MAX_CATEGORY_LENGTH 25
+#define MAX_DEVID_LENGTH 50
 
 enum LABEL
 {
     APP_NAME = 0,
     APP_ID = 1,
     CATEGORY = 2,
-    INSTALLS = 3,
+    DEV_ID = 3,
 };
 
 struct AppInfo
@@ -23,32 +23,95 @@ struct AppInfo
     char appName[MAX_APPNAME_LENGTH];
     char appId[MAX_APPID_LENGTH];
     char category[MAX_CATEGORY_LENGTH];
-    char installs[MAX_INSTALLS_LENGTH];
-};
-
-// Estrutura para passar dados para a thread
-struct ThreadData
-{
-    FILE *csvFile;
-    FILE *binaryFile;
+    char devId[MAX_DEVID_LENGTH];
 };
 
 // Estrutura para o índice parcial
 struct IndexEntry
 {
-    char label[MAX_APPID_LENGTH]; // Nome do campo indexado (appName, appId, category, installs)
+    char label[MAX_APPID_LENGTH]; // Nome do campo indexado (appName, appId, category, devId)
     long position;                // Posição do registro
 };
 
 // Defina uma estrutura para o índice parcial em memória
 struct MemoryIndexEntry
 {
-    char label[MAX_APPNAME_LENGTH]; // Nome do campo indexado (appName, appId, category, installs)
+    char label[MAX_APPNAME_LENGTH]; // Nome do campo indexado (appName, appId, category, devId)
     long position;                  // Posição do registro
 };
 
+int processCSVFile(const char *filename, const char *binaryFilename)
+{
+    FILE *csvFile = fopen(filename, "r");
+    if (csvFile == NULL)
+    {
+        perror("Erro ao abrir o arquivo CSV");
+        return 1;
+    }
+
+    FILE *binaryFile = fopen(binaryFilename, "wb");
+    if (binaryFile == NULL)
+    {
+        perror("Erro ao abrir o arquivo binário");
+        fclose(csvFile);
+        return 1;
+    }
+
+    FILE *textFile = fopen("teste.txt", "w");
+
+    char line[MAX_LINE_LENGTH];
+    struct AppInfo appInfo;
+
+    const char *delimiter = ",";
+    char *token;
+    int tokenCount = 0;
+
+    while (fgets(line, sizeof(line), csvFile))
+    {
+        // Reinicialize a estrutura AppInfo para cada linha
+        memset(&appInfo, 0, sizeof(struct AppInfo));
+
+        tokenCount = 0;
+        token = strtok((char *)line, delimiter);
+
+        while (token != NULL && tokenCount < 4)
+        {
+            switch (tokenCount)
+            {
+            case 0:
+                strncpy(appInfo.appName, token, sizeof(appInfo.appName));
+                break;
+            case 1:
+                strncpy(appInfo.appId, token, sizeof(appInfo.appId));
+                break;
+            case 2:
+                strncpy(appInfo.category, token, sizeof(appInfo.category));
+                break;
+            case 3:
+                strncpy(appInfo.devId, token, sizeof(appInfo.devId));
+                break;
+            }
+            token = strtok(NULL, delimiter);
+            tokenCount++;
+        }
+
+        fwrite(&appInfo, sizeof(struct AppInfo), 1, binaryFile);
+
+        fprintf(textFile, "App Name: %s\n", appInfo.appName);
+        fprintf(textFile, "App ID: %s\n", appInfo.appId);
+        fprintf(textFile, "Category: %s\n", appInfo.category);
+        fprintf(textFile, "Installs: %s\n", appInfo.devId);
+        fprintf(textFile, "-------------------------\n");
+    }
+
+    fclose(csvFile);
+    fclose(binaryFile);
+    fclose(textFile);
+    return 0;
+}
+
 // Função para criar o índice parcial
-int createFileIndex(FILE * binaryFile, const char *indexFileName, enum LABEL label)
+int createFileIndex(FILE *binaryFile, const char *indexFileName, enum LABEL label)
 {
     if (binaryFile == NULL)
     {
@@ -84,8 +147,8 @@ int createFileIndex(FILE * binaryFile, const char *indexFileName, enum LABEL lab
             strncpy(indexEntry.label, appInfo.category, sizeof(indexEntry.label));
             break;
 
-        case INSTALLS:
-            strncpy(indexEntry.label, appInfo.installs, sizeof(indexEntry.label));
+        case DEV_ID:
+            strncpy(indexEntry.label, appInfo.devId, sizeof(indexEntry.label));
             break;
         }
         indexEntry.position = currentPosition;
@@ -98,7 +161,7 @@ int createFileIndex(FILE * binaryFile, const char *indexFileName, enum LABEL lab
 }
 
 // Função para criar o índice parcial em memória
-int createMemoryIndex(FILE * binaryFile, struct MemoryIndexEntry **memoryIndex, int *indexSize, enum LABEL label)
+int createMemoryIndex(FILE *binaryFile, struct MemoryIndexEntry **memoryIndex, int *indexSize, enum LABEL label)
 {
     if (binaryFile == NULL)
     {
@@ -148,8 +211,8 @@ int createMemoryIndex(FILE * binaryFile, struct MemoryIndexEntry **memoryIndex, 
             strncpy((*memoryIndex)[*indexSize].label, appInfo.category, sizeof((*memoryIndex)[*indexSize].label));
             break;
 
-        case INSTALLS:
-            strncpy((*memoryIndex)[*indexSize].label, appInfo.installs, sizeof((*memoryIndex)[*indexSize].label));
+        case DEV_ID:
+            strncpy((*memoryIndex)[*indexSize].label, appInfo.devId, sizeof((*memoryIndex)[*indexSize].label));
             break;
         }
 
@@ -161,14 +224,12 @@ int createMemoryIndex(FILE * binaryFile, struct MemoryIndexEntry **memoryIndex, 
     return 0;
 }
 
-// Função para processar uma linha do arquivo CSV
 void processCSVLine(const char *line, struct AppInfo *appInfo)
 {
     const char *delimiter = ",";
     char *token;
     int tokenCount = 0;
 
-    // Encontre o primeiro token
     token = strtok((char *)line, delimiter);
 
     while (token != NULL && tokenCount < 4)
@@ -185,79 +246,12 @@ void processCSVLine(const char *line, struct AppInfo *appInfo)
             strncpy(appInfo->category, token, sizeof(appInfo->category));
             break;
         case 3:
-            // Remove as aspas duplas e os sinais de mais do campo "Installs"
-            char *src = token;
-            char *dst = appInfo->installs;
-            while (*src)
-            {
-                if (*src != '"' && *src != '+')
-                {
-                    *dst++ = *src;
-                }
-                src++;
-            }
-            *dst = '\0'; // Encerra a string com um caractere nulo
+            strncpy(appInfo->devId, token, sizeof(appInfo->devId));
             break;
         }
         token = strtok(NULL, delimiter);
         tokenCount++;
     }
-}
-
-// Função executada por cada thread
-void *threadProcessCSV(void *arg)
-{
-    struct ThreadData *data = (struct ThreadData *)arg;
-    char line[MAX_LINE_LENGTH];
-    struct AppInfo appInfo;
-
-    while (fgets(line, sizeof(line), data->csvFile))
-    {
-        processCSVLine(line, &appInfo);
-        fwrite(&appInfo, sizeof(struct AppInfo), 1, data->binaryFile);
-    }
-
-    return NULL;
-}
-
-// Função para inicializar threads e processar o arquivo CSV
-int processCSVFileWithThreads(const char *filename, const char *binaryFilename, int numThreads)
-{
-    FILE *csvFile = fopen(filename, "r");
-    if (csvFile == NULL)
-    {
-        perror("Erro ao abrir o arquivo CSV");
-        return 1;
-    }
-
-    FILE *binaryFile = fopen(binaryFilename, "wb");
-    if (binaryFile == NULL)
-    {
-        perror("Erro ao abrir o arquivo binário");
-        fclose(csvFile);
-        return 1;
-    }
-
-    pthread_t threads[numThreads];
-    struct ThreadData threadData[numThreads];
-
-    // Inicializar threads
-    for (int i = 0; i < numThreads; i++)
-    {
-        threadData[i].csvFile = csvFile;
-        threadData[i].binaryFile = binaryFile;
-        pthread_create(&threads[i], NULL, threadProcessCSV, &threadData[i]);
-    }
-
-    // Aguardar o término das threads
-    for (int i = 0; i < numThreads; i++)
-    {
-        pthread_join(threads[i], NULL);
-    }
-
-    fclose(csvFile);
-    fclose(binaryFile);
-    return 0;
 }
 
 // Estrutura para o nó da árvore AVL
@@ -384,7 +378,7 @@ struct AVLNode *insertAVLNode(struct AVLNode *root, struct MemoryIndexEntry data
 }
 
 // Função para criar o índice em memória usando uma árvore AVL
-void createMemoryAVLIndex(FILE * binaryFile, struct AVLNode **avlIndex, enum LABEL label)
+void createMemoryAVLIndex(FILE *binaryFile, struct AVLNode **avlIndex, enum LABEL label)
 {
     if (binaryFile == NULL)
     {
@@ -413,8 +407,8 @@ void createMemoryAVLIndex(FILE * binaryFile, struct AVLNode **avlIndex, enum LAB
             strncpy(indexEntry.label, appInfo.category, sizeof(indexEntry.label));
             break;
 
-        case INSTALLS:
-            strncpy(indexEntry.label, appInfo.installs, sizeof(indexEntry.label));
+        case DEV_ID:
+            strncpy(indexEntry.label, appInfo.devId, sizeof(indexEntry.label));
             break;
         }
 
@@ -425,6 +419,222 @@ void createMemoryAVLIndex(FILE * binaryFile, struct AVLNode **avlIndex, enum LAB
     rewind(binaryFile);
 }
 
+// Função para comparar dois índices por label
+int compareIndexEntry(const void *a, const void *b)
+{
+    return strcmp(((struct IndexEntry *)a)->label, ((struct IndexEntry *)b)->label);
+}
+
+// Função de pesquisa binária no índice
+long binarySearchIndex(struct IndexEntry *index, int numEntries, const char *key)
+{
+    int left = 0;
+    int right = numEntries - 1;
+
+    while (left <= right)
+    {
+        int mid = (left + right) / 2;
+        int cmp = strcmp(index[mid].label, key);
+
+        if (cmp == 0)
+        {
+            return index[mid].position; // Encontrou o registro
+        }
+        else if (cmp < 0)
+        {
+            left = mid + 1;
+        }
+        else
+        {
+            right = mid - 1;
+        }
+    }
+
+    return -1; // Registro não encontrado
+}
+
+// Função de consulta principal
+int binarySearchIndexFile(const char *indexFileName, const char *dataFileName, enum LABEL label, const char *searchKey)
+{
+    FILE *indexFile = fopen(indexFileName, "rb");
+    if (indexFile == NULL)
+    {
+        perror("Erro ao abrir o arquivo de índice");
+        return -1;
+    }
+
+    fseek(indexFile, 0, SEEK_END);
+    long numEntries = ftell(indexFile) / sizeof(struct IndexEntry);
+    rewind(indexFile);
+
+    struct IndexEntry *index = (struct IndexEntry *)malloc(numEntries * sizeof(struct IndexEntry));
+    if (index == NULL)
+    {
+        perror("Erro ao alocar memória para o índice");
+        fclose(indexFile);
+        return -1;
+    }
+
+    fread(index, sizeof(struct IndexEntry), numEntries, indexFile);
+    fclose(indexFile);
+
+    qsort(index, numEntries, sizeof(struct IndexEntry), compareIndexEntry);
+
+    long position = binarySearchIndex(index, numEntries, searchKey);
+
+    if (position != -1)
+    {
+        FILE *dataFile = fopen(dataFileName, "rb");
+        if (dataFile == NULL)
+        {
+            perror("Erro ao abrir o arquivo de dados");
+            free(index);
+            return -1;
+        }
+
+        fseek(dataFile, position, SEEK_SET);
+        struct AppInfo appInfo;
+        fread(&appInfo, sizeof(struct AppInfo), 1, dataFile);
+
+        printf("\nRegistro encontrado:\n");
+        printf("AppName: %s\n", appInfo.appName);
+        printf("AppId: %s\n", appInfo.appId);
+        printf("Category: %s\n", appInfo.category);
+        printf("Developer ID: %s\n", appInfo.devId);
+
+        fclose(dataFile);
+    }
+    else
+    {
+        printf("Registro não encontrado.\n");
+    }
+
+    free(index);
+
+    return 0;
+}
+
+// Função de pesquisa binária em memória
+void binarySearchIndexMemory(struct MemoryIndexEntry *memoryIndex, int indexSize, FILE *binaryFile, const char *target)
+{
+    int left = 0;
+    int right = indexSize - 1;
+
+    while (left <= right)
+    {
+        int mid = left + (right - left) / 2;
+        int cmp = strcmp(memoryIndex[mid].label, target);
+
+        if (cmp == 0)
+        {
+            // Encontrou o valor, retorne a posição
+            long position = memoryIndex[mid].position;
+
+            // Use o comando "seek" para acessar o registro correspondente no arquivo de dados
+            struct AppInfo appInfo;
+            if (fseek(binaryFile, position, SEEK_SET) != 0)
+            {
+                perror("Erro ao mover o ponteiro de arquivo");
+                return;
+            }
+
+            if (fread(&appInfo, sizeof(struct AppInfo), 1, binaryFile) != 1)
+            {
+                perror("Erro ao ler o registro do arquivo");
+                return;
+            }
+
+            printf("\nRegistro encontrado:\n");
+            printf("AppName: %s\n", appInfo.appName);
+            printf("AppId: %s\n", appInfo.appId);
+            printf("Category: %s\n", appInfo.category);
+            printf("Developer ID: %s\n", appInfo.devId);
+
+            return;
+        }
+        else if (cmp < 0)
+        {
+            left = mid + 1;
+        }
+        else
+        {
+            right = mid - 1;
+        }
+    }
+}
+
+char* removeNewline(const char *str) {
+    int len = strlen(str);
+    char *cleanedStr = (char *)malloc(len + 1);
+    
+    if (cleanedStr == NULL) {
+        return NULL;
+    }
+
+    int j = 0;
+    
+    for (int i = 0; i < len; i++) {
+        if (str[i] != '\n') {
+            cleanedStr[j++] = str[i];
+        }
+    }
+    
+    cleanedStr[j] = '\0';
+    
+    return cleanedStr;
+}
+
+// Função para realizar pesquisa binária na árvore AVL de índice e buscar no arquivo de dados
+void binarySearchIndexAVL(struct AVLNode *root, FILE *binaryFile, const char *target)
+{
+    if (root == NULL)
+        return;
+    target = removeNewline(target);
+    char *label = removeNewline(root->data.label);
+
+    int compare = strcmp(target, label);
+
+    if (compare == 0)
+    {
+        if (binaryFile == NULL)
+        {
+            perror("Erro ao abrir o arquivo binário");
+            return;
+        }
+        
+        long position = root->data.position - sizeof(struct AppInfo);
+
+        if (fseek(binaryFile, position, SEEK_SET) == 0)
+        {
+            struct AppInfo appInfo;
+            if (fread(&appInfo, sizeof(struct AppInfo), 1, binaryFile) == 1)
+            {
+                printf("\nRegistro encontrado:\n");
+                printf("AppName: %s\n", appInfo.appName);
+                printf("AppId: %s\n", appInfo.appId);
+                printf("Category: %s\n", appInfo.category);
+                printf("Developer ID: %s\n", appInfo.devId);
+            }
+            else
+            {
+                perror("Erro ao ler dados do arquivo binário");
+            }
+        }
+        else
+        {
+            perror("Erro ao buscar posição no arquivo binário");
+        }
+    }
+    else if (compare < 0)
+    {
+        binarySearchIndexAVL(root->left, binaryFile, target);
+    }
+    else
+    {
+        binarySearchIndexAVL(root->right, binaryFile, target);
+    }
+}
+
 int main()
 {
     // Define os nomes dos arquivos
@@ -432,7 +642,6 @@ int main()
     const char *binaryFilename = "file.bin";
     const char *firstIndex = "firstIndex.bin";
     const char *secondIndex = "secondIndex.bin";
-
 
     // Definições para o índice em memória
     struct MemoryIndexEntry *thirdIndex = NULL;
@@ -444,10 +653,10 @@ int main()
     // Para as pesquisas
     const char *appId = "com.ironwaterstudio.masks";
     const char *appName = "Pupsy";
+    const char *category = "Tools";
+    const char *devId = "ivanGjurovic";
 
-    const int numThreads = 4; // Número de threads a serem usadas
-
-    if (processCSVFileWithThreads(filename, binaryFilename, numThreads) == 0)
+    if (processCSVFile(filename, binaryFilename) == 0)
         printf("Processamento do arquivo CSV concluído com sucesso.\n");
 
     FILE *bin = fopen(binaryFilename, "rb");
@@ -464,11 +673,29 @@ int main()
     if (createMemoryIndex(bin, &thirdIndex, &indexSize, CATEGORY) == 0)
         printf("Criação do terceiro índice concluído com sucesso.\n");
 
-    // Cria índice em memória utilizando uma AVL do installs
-    createMemoryAVLIndex(bin, &avlIndex, INSTALLS);
+    // Cria índice em memória utilizando uma AVL do devId
+    createMemoryAVLIndex(bin, &avlIndex, DEV_ID);
 
     if (avlIndex != NULL)
         printf("Criação do quarto índice concluído com sucesso.\n");
+
+    // Realizando as buscas
+
+    // Primeira busca utilizando o índice em arquivo
+    printf("Realizando primeira busca para campo appId: %s\n", appId);
+    binarySearchIndexFile(firstIndex, binaryFilename, APP_ID, appId);
+
+    // Segunda busca utilizando o índice em arquivo
+    printf("Realizando segunda busca para campo appName: %s\n", appName);
+    binarySearchIndexFile(secondIndex, binaryFilename, APP_NAME, appName);
+
+    // Terceira busca utilizando o índice em memória
+    printf("Realizando terceira busca para campo category: %s\n", category);
+    binarySearchIndexMemory(thirdIndex, indexSize, bin, category);
+
+    // Quarta busca utilizando o índice em uma AVL
+    printf("Realizando quarta busca para campo devId: %s\n", devId);
+    binarySearchIndexAVL(avlIndex, bin, devId);
 
     free(thirdIndex);
     free(avlIndex);
