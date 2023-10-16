@@ -563,24 +563,28 @@ void binarySearchIndexMemory(struct MemoryIndexEntry *memoryIndex, int indexSize
     }
 }
 
-char* removeNewline(const char *str) {
+char *removeNewline(const char *str)
+{
     int len = strlen(str);
     char *cleanedStr = (char *)malloc(len + 1);
-    
-    if (cleanedStr == NULL) {
+
+    if (cleanedStr == NULL)
+    {
         return NULL;
     }
 
     int j = 0;
-    
-    for (int i = 0; i < len; i++) {
-        if (str[i] != '\n') {
+
+    for (int i = 0; i < len; i++)
+    {
+        if (str[i] != '\n')
+        {
             cleanedStr[j++] = str[i];
         }
     }
-    
+
     cleanedStr[j] = '\0';
-    
+
     return cleanedStr;
 }
 
@@ -601,7 +605,7 @@ void binarySearchIndexAVL(struct AVLNode *root, FILE *binaryFile, const char *ta
             perror("Erro ao abrir o arquivo binário");
             return;
         }
-        
+
         long position = root->data.position - sizeof(struct AppInfo);
 
         if (fseek(binaryFile, position, SEEK_SET) == 0)
@@ -633,6 +637,64 @@ void binarySearchIndexAVL(struct AVLNode *root, FILE *binaryFile, const char *ta
     {
         binarySearchIndexAVL(root->right, binaryFile, target);
     }
+}
+
+int binarySearchDataFile(const char *dataFileName, enum LABEL label, const char *key)
+{
+    FILE *dataFile = fopen(dataFileName, "rb");
+    if (dataFile == NULL)
+    {
+        perror("Erro ao abrir o arquivo de dados");
+        return -1;
+    }
+
+    struct AppInfo appInfo;
+    long position = 0;
+    int found = 0;
+
+    while (fread(&appInfo, sizeof(struct AppInfo), 1, dataFile) == 1)
+    {
+        const char *comp = NULL;
+        switch (label)
+        {
+        case APP_NAME:
+            comp = appInfo.appName;
+            break;
+        case APP_ID:
+            comp = appInfo.appId;
+            break;
+        case CATEGORY:
+            comp = appInfo.category;
+            break;
+        case DEV_ID:
+            comp = appInfo.devId;
+            break;
+        }
+        if (comp != NULL && strcmp(comp, key) == 0)
+        {
+            found = 1;
+            break;
+        }
+
+        position += sizeof(struct AppInfo);
+    }
+
+    fclose(dataFile);
+
+    if (found)
+    {
+        printf("\nRegistro encontrado:\n");
+        printf("AppName: %s\n", appInfo.appName);
+        printf("AppId: %s\n", appInfo.appId);
+        printf("Category: %s\n", appInfo.category);
+        printf("Developer ID: %s\n", appInfo.devId);
+    }
+    else
+    {
+        printf("Registro não encontrado.\n");
+    }
+
+    return 0;
 }
 
 int main()
@@ -697,9 +759,14 @@ int main()
     printf("Realizando quarta busca para campo devId: %s\n", devId);
     binarySearchIndexAVL(avlIndex, bin, devId);
 
+    fclose(bin);
+
+    // Quinta busca utilizando o arquivo binário original sem índices
+    printf("Realizando quinta busca para campo appId: %s no arquivo binário:\n", devId);
+    binarySearchDataFile(binaryFilename, APP_ID, appId);
+
     free(thirdIndex);
     free(avlIndex);
-    fclose(bin);
 
     return 0;
 }
