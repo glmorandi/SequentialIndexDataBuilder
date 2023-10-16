@@ -46,7 +46,7 @@ Download the dataeset from Kaggle and place it on the same directory as ``main.p
    ```
 7. **Compile the program**
 	```bash
-	gcc main.c -o main
+	gcc main.c -o main -lm
 	```
 8. **Run the program**
 	```bash
